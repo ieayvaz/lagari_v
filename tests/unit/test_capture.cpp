@@ -59,7 +59,7 @@ TEST_F(V4L2CaptureTest, CreateWithConfig) {
     EXPECT_FALSE(capture.is_open());
 }
 
-TEST_F(V4L2CaptureTest, DISABLED_InitializeWithCamera) {
+TEST_F(V4L2CaptureTest, InitializeWithCamera) {
     // This test requires actual camera hardware
     // Run manually when hardware is available
     

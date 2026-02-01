@@ -18,7 +18,7 @@ system:
 
 # Capture
 capture:
-  source: auto                   # auto, csi, usb, file, rtsp, simulation
+  source: auto                   # auto, csi, usb, file, rtsp, simulation, isaac
   width: 1280
   height: 720
   fps: 30
@@ -39,6 +39,13 @@ capture:
   # File/simulation source
   file_path: ""
   loop_file: true
+  
+  # Isaac Sim settings (when source: isaac)
+  isaac:
+    shm_name: lagari_camera        # Shared memory segment name  
+    poll_interval_us: 100          # Polling interval (microseconds)
+    reconnect: true                # Auto-reconnect if detached
+    reconnect_delay_ms: 1000       # Delay before reconnect attempt
 
 # Detection
 detection:

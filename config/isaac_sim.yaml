@@ -1,0 +1,73 @@
+# Lagari Vision - Isaac Sim Configuration
+# For use with Isaac Sim camera streaming via shared memory
+
+logging:
+  level: debug
+  file: ""
+  console: true
+
+system:
+  target_fps: 30
+  max_latency_ms: 50   # Tighter latency with shared memory
+  state_machine:
+    initial_state: searching
+    auto_start: true
+
+capture:
+  source: isaac                  # Use Isaac Sim camera via shared memory
+  width: 1280
+  height: 720
+  fps: 30
+  
+  # Isaac Sim shared memory settings
+  isaac:
+    shm_name: lagari_camera      # Shared memory segment name (/dev/shm/lagari_camera)
+    poll_interval_us: 100        # Poll every 100µs for ultra-low latency
+    reconnect: true              # Auto-reconnect if segment disappears
+    reconnect_delay_ms: 1000
+
+detection:
+  backend: auto
+  yolo_version: yolov8
+  model_path: models/yolov8n.onnx
+  labels_path: models/coco.names
+  
+  input_width: 640
+  input_height: 640
+  confidence_threshold: 0.25
+  nms_threshold: 0.45
+
+qr:
+  enabled: true
+  decode_full_frame: true
+
+guidance:
+  enabled: true
+  target_class_id: 0             # Track 'person' in COCO
+  
+  pid:
+    roll:
+      kp: 0.5
+      ki: 0.01
+      kd: 0.1
+    pitch:
+      kp: 0.5
+      ki: 0.01
+      kd: 0.1
+    yaw:
+      kp: 0.3
+      ki: 0.0
+      kd: 0.05
+
+autopilot:
+  enabled: false                 # Disabled for simulation
+
+telemetry:
+  enabled: false
+
+recording:
+  enabled: false
+
+performance:
+  enabled: true
+  log_interval_s: 5

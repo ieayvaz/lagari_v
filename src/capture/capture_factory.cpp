@@ -6,10 +6,12 @@
 #include "lagari/capture/v4l2_capture.hpp"
 #endif
 
+#include "lagari/capture/sim_capture.hpp"
+#include "lagari/capture/isaac_shm_capture.hpp"
+
 // Forward declarations for other backends
 // #include "lagari/capture/argus_capture.hpp"
 // #include "lagari/capture/libcamera_capture.hpp"
-// #include "lagari/capture/sim_capture.hpp"
 
 namespace lagari {
 
@@ -22,6 +24,7 @@ std::unique_ptr<ICapture> create_capture(const Config& config) {
     else if (source_str == "file") cc.source = CaptureSource::FILE;
     else if (source_str == "rtsp") cc.source = CaptureSource::RTSP;
     else if (source_str == "simulation") cc.source = CaptureSource::SIMULATION;
+    else if (source_str == "isaac" || source_str == "isaac_sim") cc.source = CaptureSource::ISAAC_SIM;
     else cc.source = CaptureSource::AUTO;
     
     cc.width = config.get_uint("capture.width", 1280);
@@ -38,7 +41,18 @@ std::unique_ptr<ICapture> create_capture(const Config& config) {
     cc.flip_vertical = config.get_bool("capture.flip_vertical", false);
     cc.rotation = config.get_int("capture.rotation", 0);
     
-    return create_capture(cc);
+    // For platform-dependent source, we need to create the right type
+    auto capture = create_capture(cc);
+    
+    // Initialize with full config (for Isaac Sim settings, etc.)
+    if (capture) {
+        if (!capture->initialize(config)) {
+            LOG_ERROR("Failed to initialize capture");
+            return nullptr;
+        }
+    }
+    
+    return capture;
 }
 
 std::unique_ptr<ICapture> create_capture(const CaptureConfig& config) {
@@ -92,10 +106,12 @@ std::unique_ptr<ICapture> create_capture(const CaptureConfig& config) {
             LOG_WARN("File/RTSP capture not yet implemented");
             break;
 
+        case CaptureSource::ISAAC_SIM:
+            // Isaac Sim via shared memory (high performance)
+            return std::make_unique<IsaacShmCapture>(config);
+
         case CaptureSource::SIMULATION:
-            // TODO: Implement simulation capture
-            LOG_WARN("Simulation capture not yet implemented");
-            break;
+            return std::make_unique<SimCapture>(config);
 
         case CaptureSource::AUTO:
         default:

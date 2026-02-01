@@ -76,6 +76,7 @@ target_link_libraries(lagari_core PUBLIC
 set(CAPTURE_SOURCES
     src/capture/capture_factory.cpp
     src/capture/sim_capture.cpp
+    src/capture/isaac_shm_capture.cpp  # Shared memory for Isaac Sim
 )
 
 if(PLATFORM_JETSON AND HAS_ARGUS)
@@ -94,6 +95,7 @@ add_library(lagari_capture STATIC ${CAPTURE_SOURCES})
 target_link_libraries(lagari_capture PUBLIC
     lagari_core
     ${OpenCV_LIBS}
+    rt  # For POSIX shared memory (shm_open, etc.)
 )
 
 if(PLATFORM_JETSON AND HAS_ARGUS)
@@ -259,6 +261,7 @@ message(STATUS "Capture backends:")
 message(STATUS "  Argus (Jetson): ${HAS_ARGUS}")
 message(STATUS "  libcamera (RPi): ${HAS_LIBCAMERA}")
 message(STATUS "  V4L2: ${HAS_V4L2}")
+message(STATUS "  Isaac Sim (SHM): TRUE")  # Always available on Linux
 message(STATUS "")
 message(STATUS "Inference backends:")
 message(STATUS "  TensorRT: ${HAS_TENSORRT}")
