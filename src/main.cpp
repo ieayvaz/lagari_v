@@ -4,7 +4,7 @@
  * 
  * This implements a threaded architecture with:
  * - Capture thread: Grabs frames from camera
- * - Processing thread: Runs display and recording (push-based)
+ * - Processing thread: Runs detection, display, and recording
  * - Main thread: Monitors system health and handles signals
  */
 
@@ -16,11 +16,11 @@
 #include "lagari/core/spsc_queue.hpp"
 
 #include "lagari/capture/capture.hpp"
+#include "lagari/detection/detector.hpp"
 #include "lagari/display/display.hpp"
 #include "lagari/recording/recorder.hpp"
 
-// Future modules (not yet integrated)
-// #include "lagari/detection/detector.hpp"
+// Future modules
 // #include "lagari/qr/qr_decoder.hpp"
 // #include "lagari/guidance/guidance.hpp"
 // #include "lagari/comms/mavlink_interface.hpp"
@@ -54,6 +54,7 @@ void print_usage(const char* program) {
               << "\n"
               << "Configuration can also be overridden via command line:\n"
               << "  --capture.source=gstreamer\n"
+              << "  --detection.enabled=true\n"
               << "  --display.enabled=true\n"
               << "  --recording.enabled=true\n"
               << std::endl;
@@ -88,12 +89,12 @@ void print_version() {
 /**
  * @brief Processing thread function
  * 
- * This thread receives frames from the capture module and pushes them
- * to display and recording modules. In the future, it will also run
- * detection and other processing.
+ * This thread receives frames from the capture module, runs detection,
+ * and pushes results to display and recording modules.
  */
 void processing_thread(
     lagari::ICapture* capture,
+    lagari::IDetector* detector,
     lagari::IDisplay* display,
     lagari::IRecorder* recorder,
     lagari::SystemStateMachine& state,
@@ -107,7 +108,11 @@ void processing_thread(
     const auto frame_interval = std::chrono::milliseconds(1000 / target_fps);
     
     uint64_t frames_processed = 0;
+    uint64_t detections_count = 0;
     auto last_stats_time = Clock::now();
+    
+    // Detection result storage
+    DetectionResult latest_detections;
     
     while (!shutdown.load(std::memory_order_acquire)) {
         auto loop_start = Clock::now();
@@ -124,42 +129,95 @@ void processing_thread(
             continue;
         }
         
-        // Calculate latency
-        Duration latency = Clock::now() - frame->metadata.timestamp;
+        // Calculate capture latency
+        Duration capture_latency = Clock::now() - frame->metadata.timestamp;
         SystemState current_state = state.state();
         
-        // TODO: In the future, run detection here
-        // auto detections = detector->detect(*frame);
-        const DetectionResult* detections = nullptr;
+        // ====================================================================
+        // Detection
+        // ====================================================================
+        const DetectionResult* detections_ptr = nullptr;
         
-        // Push to display (no-op if disabled or nullptr)
-        if (display && display->is_enabled()) {
-            display->push_frame(*frame, detections, current_state, latency);
+        if (detector && detector->is_running()) {
+            auto detect_start = Clock::now();
+            
+            // Run synchronous detection
+            latest_detections = detector->detect(*frame);
+            
+            auto detect_time = Clock::now() - detect_start;
+            
+            if (!latest_detections.detections.empty()) {
+                detections_count += latest_detections.detections.size();
+                
+                // Update state based on detections
+                if (current_state == SystemState::SEARCHING) {
+                    state.set_state(SystemState::TRACKING);
+                }
+            } else {
+                // No detections - might want to transition back to SEARCHING
+                if (current_state == SystemState::TRACKING) {
+                    // Could add a timeout here before going back to SEARCHING
+                }
+            }
+            
+            detections_ptr = &latest_detections;
+            
+            // Log detection details at debug level
+            if (!latest_detections.detections.empty()) {
+                LOG_DEBUG("Detected {} objects, inference={:.1f}ms",
+                          latest_detections.detections.size(),
+                          std::chrono::duration<float, std::milli>(detect_time).count());
+            }
         }
         
-        // Push to recorder (no-op if not recording)
+        // Total latency including detection
+        Duration total_latency = Clock::now() - frame->metadata.timestamp;
+        
+        // ====================================================================
+        // Display
+        // ====================================================================
+        if (display && display->is_enabled()) {
+            display->push_frame(*frame, detections_ptr, current_state, total_latency);
+        }
+        
+        // ====================================================================
+        // Recording
+        // ====================================================================
         if (recorder && recorder->is_recording()) {
-            recorder->add_frame(*frame, detections);
+            recorder->add_frame(*frame, detections_ptr);
         }
         
         frames_processed++;
         
-        // Log stats every 10 seconds
+        // ====================================================================
+        // Statistics (every 10 seconds)
+        // ====================================================================
         auto now = Clock::now();
         if (now - last_stats_time > std::chrono::seconds(10)) {
             auto elapsed = std::chrono::duration<float>(now - last_stats_time).count();
             float fps = frames_processed / elapsed;
             
-            LOG_INFO("Processing stats: fps={:.1f}, latency={:.1f}ms",
-                     fps, std::chrono::duration<float, std::milli>(latency).count());
+            LOG_INFO("Processing: fps={:.1f}, latency={:.1f}ms, detections={}",
+                     fps,
+                     std::chrono::duration<float, std::milli>(total_latency).count(),
+                     detections_count);
             
-            // Log capture stats
+            // Capture stats
             auto capture_stats = capture->get_stats();
             LOG_DEBUG("Capture: frames={}, dropped={}, fps={:.1f}",
                       capture_stats.frames_captured, capture_stats.frames_dropped,
                       capture_stats.current_fps);
             
-            // Log display stats if enabled
+            // Detection stats
+            if (detector && detector->is_running()) {
+                auto det_stats = detector->get_stats();
+                LOG_DEBUG("Detection: frames={}, avg_time={:.1f}ms, fps={:.1f}",
+                          det_stats.frames_processed,
+                          std::chrono::duration<float, std::milli>(det_stats.average_inference_time).count(),
+                          det_stats.inference_fps);
+            }
+            
+            // Display stats
             if (display && display->is_enabled()) {
                 auto display_stats = display->get_stats();
                 LOG_DEBUG("Display: frames={}, dropped={}, fps={:.1f}",
@@ -167,13 +225,14 @@ void processing_thread(
                           display_stats.current_fps);
             }
             
-            // Log recorder stats if recording
+            // Recording stats
             if (recorder && recorder->is_recording()) {
                 LOG_DEBUG("Recording: duration={:.1f}s, bytes={}",
                           recorder->recording_duration(), recorder->bytes_written());
             }
             
             frames_processed = 0;
+            detections_count = 0;
             last_stats_time = now;
         }
         
@@ -241,6 +300,17 @@ int main(int argc, char* argv[]) {
 
     LOG_INFO("Configuration loaded from: {}", config_path);
 
+    // Log available inference backends
+    auto backends = available_backends();
+    if (backends.empty()) {
+        LOG_WARN("No inference backends available - detection disabled");
+    } else {
+        LOG_INFO("Available inference backends: {}", backends.size());
+        for (auto& backend : backends) {
+            LOG_INFO("  - {}", to_string(backend));
+        }
+    }
+
     // Initialize state machine
     SystemStateMachine& state = global_state();
     state.on_state_change([](SystemState old_state, SystemState new_state) {
@@ -260,6 +330,20 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // Detection module (optional, depends on model path and backends)
+    std::unique_ptr<IDetector> detector;
+    bool detection_enabled = config.get_bool("detection.enabled", true);
+    std::string model_path = config.get_string("detection.model_path", "");
+    
+    if (detection_enabled && !model_path.empty() && !backends.empty()) {
+        detector = create_detector(config);
+        if (!detector) {
+            LOG_WARN("Failed to create detector - continuing without detection");
+        }
+    } else if (detection_enabled && model_path.empty()) {
+        LOG_WARN("Detection enabled but no model_path specified - skipping detection");
+    }
+
     // Display module (optional)
     auto display = create_display(config);
     
@@ -277,6 +361,11 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     LOG_INFO("Capture module initialized: {}", capture->name());
+
+    if (detector) {
+        // Detector is initialized in factory, just log
+        LOG_INFO("Detector module initialized: backend={}", to_string(detector->backend()));
+    }
 
     if (display) {
         if (!display->initialize(config)) {
@@ -311,6 +400,12 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // Start detector
+    if (detector) {
+        detector->start();
+        LOG_INFO("Detector started");
+    }
+
     // Start display
     if (display) {
         display->start();
@@ -337,6 +432,7 @@ int main(int argc, char* argv[]) {
     std::thread proc_thread(
         processing_thread,
         capture.get(),
+        detector.get(),
         display.get(),
         recorder.get(),
         std::ref(state),
@@ -370,6 +466,13 @@ int main(int argc, char* argv[]) {
             auto capture_stats = capture->get_stats();
             LOG_INFO("System status: state={}, capture_fps={:.1f}",
                      state.state_string(), capture_stats.current_fps);
+            
+            if (detector && detector->is_running()) {
+                auto det_stats = detector->get_stats();
+                LOG_INFO("Detection status: inference_fps={:.1f}, frames={}",
+                         det_stats.inference_fps, det_stats.frames_processed);
+            }
+            
             last_log = now;
         }
     }
@@ -400,6 +503,11 @@ int main(int argc, char* argv[]) {
     if (display) {
         display->stop();
         LOG_INFO("Display stopped");
+    }
+
+    if (detector) {
+        detector->stop();
+        LOG_INFO("Detector stopped");
     }
 
     capture->stop();

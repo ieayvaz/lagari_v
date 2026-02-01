@@ -68,6 +68,8 @@ std::unique_ptr<IDetector> create_detector(const Config& config) {
         backend = InferenceBackend::NCNN;
 #elif defined(HAS_HAILO)
         backend = InferenceBackend::HAILO;
+#elif defined(HAS_ONNXRUNTIME)
+        backend = InferenceBackend::ONNXRUNTIME;
 #else
         LOG_ERROR("No inference backend available");
         return nullptr;

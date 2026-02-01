@@ -12,6 +12,7 @@ find_package(OpenCV 4.0 REQUIRED COMPONENTS
     imgcodecs
     videoio
     highgui
+    dnn
 )
 message(STATUS "Found OpenCV: ${OpenCV_VERSION}")
 
