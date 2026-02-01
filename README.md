@@ -213,8 +213,8 @@ pip install onnxruntime-gpu
 # C++ library
 wget https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-linux-x64-gpu-1.23.2.tgz
 tar xzf onnxruntime-linux-x64-gpu-1.23.2.tgz
-sudo cp -r onnxruntime-linux-x64-gpu-1.23.2.tgz/include/* /usr/local/include/
-sudo cp -r onnxruntime-linux-x64-gpu-1.23.2.tgz/lib/* /usr/local/lib/
+sudo cp -r onnxruntime-linux-x64-gpu-1.23.2/include/* /usr/local/include/onnxruntime/
+sudo cp -r onnxruntime-linux-x64-gpu-1.23.2.tgz/lib/* /usr/local/lib64/
 sudo ldconfig
 ```
 
