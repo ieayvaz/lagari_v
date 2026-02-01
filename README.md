@@ -99,6 +99,9 @@ cmake --build build/x86-release
 
 # Run tests
 ctest --test-dir build/x86-release --output-on-failure
+
+# Run with detection model
+./build/lagari_vision   --capture.source=usb   --detection.enabled=true   --detection.model_path=models/yolov8_avcı.onnx --detection.labels_path=models/avci.names --display.enabled=true
 ```
 
 ### Using CMake Presets
