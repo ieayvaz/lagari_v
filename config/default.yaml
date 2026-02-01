@@ -118,7 +118,7 @@ detection:
 
   # ONNX Runtime-specific settings
   onnxruntime:
-    provider: cpu                # cpu, cuda, tensorrt, directml, coreml
+    provider: cuda                # cpu, cuda, tensorrt, directml, coreml
     device_id: 0                 # Device ID for GPU providers
 
 # QR Decoding
