@@ -158,8 +158,4 @@ ctest --test-dir build/x86-debug --output-on-failure
 
 ## License
 
-[Your License Here]
-
 ## Contributing
-
-[Contribution Guidelines]
