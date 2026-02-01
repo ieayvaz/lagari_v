@@ -50,18 +50,8 @@ std::unique_ptr<ICapture> create_capture(const Config& config) {
     cc.flip_vertical = config.get_bool("capture.flip_vertical", false);
     cc.rotation = config.get_int("capture.rotation", 0);
     
-    // For platform-dependent source, we need to create the right type
-    auto capture = create_capture(cc);
-    
-    // Initialize with full config (for backend-specific settings)
-    if (capture) {
-        if (!capture->initialize(config)) {
-            LOG_ERROR("Failed to initialize capture");
-            return nullptr;
-        }
-    }
-    
-    return capture;
+    // Create capture object - caller is responsible for initialization
+    return create_capture(cc);
 }
 
 std::unique_ptr<ICapture> create_capture(const CaptureConfig& config) {

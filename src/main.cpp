@@ -1,3 +1,13 @@
+/**
+ * @file main.cpp
+ * @brief Lagari Vision System main entry point
+ * 
+ * This implements a threaded architecture with:
+ * - Capture thread: Grabs frames from camera
+ * - Processing thread: Runs display and recording (push-based)
+ * - Main thread: Monitors system health and handles signals
+ */
+
 #include "lagari/core/config.hpp"
 #include "lagari/core/logger.hpp"
 #include "lagari/core/system_state.hpp"
@@ -6,18 +16,23 @@
 #include "lagari/core/spsc_queue.hpp"
 
 #include "lagari/capture/capture.hpp"
-#include "lagari/detection/detector.hpp"
-#include "lagari/qr/qr_decoder.hpp"
-#include "lagari/guidance/guidance.hpp"
-#include "lagari/comms/mavlink_interface.hpp"
-#include "lagari/comms/telemetry.hpp"
+#include "lagari/display/display.hpp"
 #include "lagari/recording/recorder.hpp"
+
+// Future modules (not yet integrated)
+// #include "lagari/detection/detector.hpp"
+// #include "lagari/qr/qr_decoder.hpp"
+// #include "lagari/guidance/guidance.hpp"
+// #include "lagari/comms/mavlink_interface.hpp"
+// #include "lagari/comms/telemetry.hpp"
 
 #include <csignal>
 #include <iostream>
 #include <thread>
 #include <chrono>
 #include <atomic>
+#include <mutex>
+#include <condition_variable>
 
 namespace {
 
@@ -38,9 +53,9 @@ void print_usage(const char* program) {
               << "  --version          Show version information\n"
               << "\n"
               << "Configuration can also be overridden via command line:\n"
-              << "  --capture.source=usb\n"
-              << "  --detection.confidence_threshold=0.6\n"
-              << "  --guidance.enabled=false\n"
+              << "  --capture.source=gstreamer\n"
+              << "  --display.enabled=true\n"
+              << "  --recording.enabled=true\n"
               << std::endl;
 }
 
@@ -65,6 +80,116 @@ void print_version() {
 }
 
 }  // namespace
+
+// ============================================================================
+// Processing Thread
+// ============================================================================
+
+/**
+ * @brief Processing thread function
+ * 
+ * This thread receives frames from the capture module and pushes them
+ * to display and recording modules. In the future, it will also run
+ * detection and other processing.
+ */
+void processing_thread(
+    lagari::ICapture* capture,
+    lagari::IDisplay* display,
+    lagari::IRecorder* recorder,
+    lagari::SystemStateMachine& state,
+    std::atomic<bool>& shutdown)
+{
+    using namespace lagari;
+    
+    LOG_INFO("Processing thread started");
+    
+    const auto target_fps = 30;
+    const auto frame_interval = std::chrono::milliseconds(1000 / target_fps);
+    
+    uint64_t frames_processed = 0;
+    auto last_stats_time = Clock::now();
+    
+    while (!shutdown.load(std::memory_order_acquire)) {
+        auto loop_start = Clock::now();
+        
+        // Get latest frame from capture
+        FramePtr frame = capture->wait_for_frame(100);  // 100ms timeout
+        
+        if (!frame || !frame->valid()) {
+            // No frame available, check if capture is still running
+            if (!capture->is_running()) {
+                LOG_WARN("Capture stopped, processing thread exiting");
+                break;
+            }
+            continue;
+        }
+        
+        // Calculate latency
+        Duration latency = Clock::now() - frame->metadata.timestamp;
+        SystemState current_state = state.state();
+        
+        // TODO: In the future, run detection here
+        // auto detections = detector->detect(*frame);
+        const DetectionResult* detections = nullptr;
+        
+        // Push to display (no-op if disabled or nullptr)
+        if (display && display->is_enabled()) {
+            display->push_frame(*frame, detections, current_state, latency);
+        }
+        
+        // Push to recorder (no-op if not recording)
+        if (recorder && recorder->is_recording()) {
+            recorder->add_frame(*frame, detections);
+        }
+        
+        frames_processed++;
+        
+        // Log stats every 10 seconds
+        auto now = Clock::now();
+        if (now - last_stats_time > std::chrono::seconds(10)) {
+            auto elapsed = std::chrono::duration<float>(now - last_stats_time).count();
+            float fps = frames_processed / elapsed;
+            
+            LOG_INFO("Processing stats: fps={:.1f}, latency={:.1f}ms",
+                     fps, std::chrono::duration<float, std::milli>(latency).count());
+            
+            // Log capture stats
+            auto capture_stats = capture->get_stats();
+            LOG_DEBUG("Capture: frames={}, dropped={}, fps={:.1f}",
+                      capture_stats.frames_captured, capture_stats.frames_dropped,
+                      capture_stats.current_fps);
+            
+            // Log display stats if enabled
+            if (display && display->is_enabled()) {
+                auto display_stats = display->get_stats();
+                LOG_DEBUG("Display: frames={}, dropped={}, fps={:.1f}",
+                          display_stats.frames_displayed, display_stats.frames_dropped,
+                          display_stats.current_fps);
+            }
+            
+            // Log recorder stats if recording
+            if (recorder && recorder->is_recording()) {
+                LOG_DEBUG("Recording: duration={:.1f}s, bytes={}",
+                          recorder->recording_duration(), recorder->bytes_written());
+            }
+            
+            frames_processed = 0;
+            last_stats_time = now;
+        }
+        
+        // Rate limiting (if processing is faster than capture)
+        auto loop_duration = Clock::now() - loop_start;
+        if (loop_duration < frame_interval) {
+            std::this_thread::sleep_for(frame_interval - loop_duration);
+        }
+    }
+    
+    LOG_INFO("Processing thread exiting");
+}
+
+// ============================================================================
+// Main
+// ============================================================================
 
 int main(int argc, char* argv[]) {
     using namespace lagari;
@@ -123,97 +248,128 @@ int main(int argc, char* argv[]) {
     });
 
     // ========================================================================
-    // Create data structures for inter-module communication
+    // Create Modules
     // ========================================================================
     
-    // Frame buffer: camera -> consumers (detection, recording, telemetry)
-    SPMCRingBuffer<FramePtr, 4> frame_buffer;
+    LOG_INFO("Creating modules...");
+
+    // Capture module (required)
+    auto capture = create_capture(config);
+    if (!capture) {
+        LOG_ERROR("Failed to create capture module");
+        return 1;
+    }
+
+    // Display module (optional)
+    auto display = create_display(config);
     
-    // Detection queue: detector -> guidance, QR decoder
-    SPSCQueue<DetectionResult, 16> detection_queue;
-    
-    // QR queue: decoder -> telemetry
-    SPSCQueue<QRResult, 8> qr_queue;
-    
-    // Command queue: guidance -> MAVLink
-    SPSCQueue<GuidanceCommand, 32> command_queue;
+    // Recorder module (optional)
+    auto recorder = create_recorder(config);
 
     // ========================================================================
-    // Initialize modules
+    // Initialize Modules
     // ========================================================================
     
     LOG_INFO("Initializing modules...");
 
-    // TODO: Create and initialize actual module implementations
-    // For now, we just demonstrate the structure
-    
-    /*
-    auto capture = create_capture(config);
-    auto detector = create_detector(config);
-    auto qr_decoder = create_qr_decoder(config);
-    auto guidance = create_guidance(config);
-    auto mavlink = create_mavlink(config);
-    auto telemetry = create_telemetry(config);
-    auto recorder = create_recorder(config);
-
-    if (!capture || !capture->initialize(config)) {
+    if (!capture->initialize(config)) {
         LOG_ERROR("Failed to initialize capture module");
         return 1;
     }
+    LOG_INFO("Capture module initialized: {}", capture->name());
 
-    if (!detector || !detector->initialize(config)) {
-        LOG_ERROR("Failed to initialize detection module");
-        return 1;
+    if (display) {
+        if (!display->initialize(config)) {
+            LOG_WARN("Failed to initialize display module, continuing without display");
+            display.reset();
+        } else {
+            LOG_INFO("Display module initialized: {}", display->name());
+        }
     }
 
-    // ... initialize other modules
-    */
+    if (recorder) {
+        if (!recorder->initialize(config)) {
+            LOG_WARN("Failed to initialize recorder module, continuing without recording");
+            recorder.reset();
+        } else {
+            LOG_INFO("Recorder module initialized: {}", recorder->name());
+        }
+    }
 
     // ========================================================================
-    // Start modules
+    // Start Modules
     // ========================================================================
     
     LOG_INFO("Starting modules...");
     
     state.set_state(SystemState::IDLE);
 
-    // TODO: Start module threads
-    
-    /*
+    // Start capture
     capture->start();
-    detector->start();
-    guidance->start();
-    mavlink->start();
-    telemetry->start();
-    recorder->start();
-    */
+    if (!capture->is_running()) {
+        LOG_ERROR("Capture module failed to start");
+        return 1;
+    }
+
+    // Start display
+    if (display) {
+        display->start();
+    }
+
+    // Start recorder
+    if (recorder) {
+        recorder->start();
+        
+        // Auto-start recording if enabled
+        if (config.get_bool("recording.enabled", false)) {
+            if (recorder->start_recording()) {
+                LOG_INFO("Recording started automatically");
+            }
+        }
+    }
 
     // ========================================================================
-    // Main loop
+    // Start Processing Thread
+    // ========================================================================
+    
+    LOG_INFO("Starting processing thread...");
+    
+    std::thread proc_thread(
+        processing_thread,
+        capture.get(),
+        display.get(),
+        recorder.get(),
+        std::ref(state),
+        std::ref(g_shutdown_requested)
+    );
+
+    state.set_state(SystemState::SEARCHING);
+
+    // ========================================================================
+    // Main Loop (Monitoring)
     // ========================================================================
     
     LOG_INFO("Entering main loop");
-    
-    if (config.get_bool("system.state_machine.auto_start", false)) {
-        state.set_state(SystemState::SEARCHING);
-    }
+    LOG_INFO("Press Ctrl+C to stop");
 
     while (!g_shutdown_requested.load(std::memory_order_acquire)) {
         // Main loop runs at low frequency for monitoring
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
         
-        // TODO: 
-        // - Monitor module health
-        // - Handle state transitions
-        // - Log performance metrics
-        // - Check for configuration updates
+        // Check module health
+        if (!capture->is_running()) {
+            LOG_ERROR("Capture module stopped unexpectedly");
+            g_shutdown_requested.store(true, std::memory_order_release);
+            break;
+        }
         
-        // Example: Log periodic status
+        // Periodic status log
         static auto last_log = Clock::now();
         auto now = Clock::now();
-        if (now - last_log > std::chrono::seconds(10)) {
-            LOG_INFO("System status: state={}, frame_buffer_size={}",
-                     state.state_string(), frame_buffer.size());
+        if (now - last_log > std::chrono::seconds(30)) {
+            auto capture_stats = capture->get_stats();
+            LOG_INFO("System status: state={}, capture_fps={:.1f}",
+                     state.state_string(), capture_stats.current_fps);
             last_log = now;
         }
     }
@@ -225,15 +381,29 @@ int main(int argc, char* argv[]) {
     LOG_INFO("Shutting down...");
     state.set_state(SystemState::SHUTDOWN);
 
-    // TODO: Stop modules in reverse order
-    /*
-    recorder->stop();
-    telemetry->stop();
-    mavlink->stop();
-    guidance->stop();
-    detector->stop();
+    // Signal processing thread to stop
+    g_shutdown_requested.store(true, std::memory_order_release);
+    
+    // Wait for processing thread
+    if (proc_thread.joinable()) {
+        proc_thread.join();
+    }
+    LOG_INFO("Processing thread stopped");
+
+    // Stop modules in reverse order
+    if (recorder) {
+        recorder->stop_recording();
+        recorder->stop();
+        LOG_INFO("Recorder stopped");
+    }
+
+    if (display) {
+        display->stop();
+        LOG_INFO("Display stopped");
+    }
+
     capture->stop();
-    */
+    LOG_INFO("Capture stopped");
 
     Logger::flush();
     Logger::shutdown();

@@ -189,15 +189,22 @@ telemetry:
     bitrate_kbps: 2000
     gop: 30
 
-# Recording
-recording:
-  enabled: true
-  output_dir: /var/lagari/recordings
+# Display
+display:
+  enabled: false                 # Set to true to enable live display
+  target: window                 # window, rtsp, udp, custom
   
-  # Video settings
-  codec: h264
-  bitrate_kbps: 8000
-  fps: 30
+  # Window settings
+  window_name: Lagari Vision
+  fullscreen: false
+  
+  # Streaming settings (for rtsp/udp targets)
+  host: 0.0.0.0
+  port: 5700
+  bitrate_kbps: 2000
+  
+  # Custom pipeline (overrides target if not empty)
+  pipeline: ""
   
   # Overlay
   overlay:
@@ -207,11 +214,36 @@ recording:
     state: true
     latency: true
   
-  # Triggers
-  trigger: manual                # manual, auto, detection
-  auto_start_delay_s: 5
+  # Performance
+  max_fps: 30
+  drop_frames: true
+  codec: h264                    # h264, mjpeg
+  hw_encode: true                # Use hardware encoding for streaming
+
+# Recording
+recording:
+  enabled: false                 # Set to true to enable recording
+  output_dir: /var/lagari/recordings
   
-  # Storage management
+  # Encoding settings
+  codec: h264                    # h264, h265
+  bitrate_kbps: 8000
+  fps: 30
+  hw_encode: true                # Use hardware encoding if available
+  
+  # Container format
+  container: mp4                 # mp4, mkv, ts
+  
+  # Overlay
+  overlay:
+    enabled: true
+    timestamp: true
+    bounding_boxes: true
+    state: true
+    latency: true
+  
+  # File management
+  segment_duration_s: 0          # 0 = single file, >0 = split into segments
   max_storage_gb: 10
   delete_oldest: true
 
@@ -229,3 +261,4 @@ performance:
     low_fps: 15
     high_cpu_percent: 80
     high_memory_percent: 80
+

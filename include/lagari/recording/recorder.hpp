@@ -2,6 +2,7 @@
 
 #include "lagari/core/module.hpp"
 #include "lagari/core/types.hpp"
+#include "lagari/recording/overlay_renderer.hpp"
 #include <memory>
 #include <string>
 
@@ -13,19 +14,23 @@ class Config;
  * @brief Recording configuration
  */
 struct RecordingConfig {
+    bool enabled = false;           // Master toggle
     std::string output_dir = "/var/lagari/recordings";
     
-    std::string codec = "h264";
+    // Encoding settings
+    std::string codec = "h264";     // h264, h265
     uint32_t bitrate_kbps = 8000;
     uint32_t fps = 30;
+    bool hw_encode = true;          // Use hardware encoding if available
     
-    bool overlay_enabled = true;
-    bool overlay_timestamp = true;
-    bool overlay_bboxes = true;
-    bool overlay_state = true;
-    bool overlay_latency = true;
+    // Container format
+    std::string container = "mp4";  // mp4, mkv, ts
     
-    // Storage management
+    // Overlay configuration
+    OverlayConfig overlay;
+    
+    // File management
+    uint32_t segment_duration_s = 0;  // 0 = single file, >0 = split into segments
     uint64_t max_storage_bytes = 10ULL * 1024 * 1024 * 1024;  // 10 GB
     bool delete_oldest = true;
 };

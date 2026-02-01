@@ -216,11 +216,33 @@ target_include_directories(lagari_comms PRIVATE
 add_library(lagari_recording STATIC
     src/recording/recorder.cpp
     src/recording/overlay_renderer.cpp
+    src/recording/gstreamer_recorder.cpp
 )
 target_link_libraries(lagari_recording PUBLIC
     lagari_core
     ${OpenCV_LIBS}
 )
+if(HAS_GSTREAMER)
+    target_link_libraries(lagari_recording PRIVATE ${GSTREAMER_LIBRARIES})
+    target_compile_definitions(lagari_recording PRIVATE HAS_GSTREAMER)
+endif()
+
+# ============================================================================
+# Display Module
+# ============================================================================
+add_library(lagari_display STATIC
+    src/display/display_factory.cpp
+    src/display/gstreamer_display.cpp
+)
+target_link_libraries(lagari_display PUBLIC
+    lagari_core
+    lagari_recording
+    ${OpenCV_LIBS}
+)
+if(HAS_GSTREAMER)
+    target_link_libraries(lagari_display PRIVATE ${GSTREAMER_LIBRARIES})
+    target_compile_definitions(lagari_display PRIVATE HAS_GSTREAMER)
+endif()
 
 # ============================================================================
 # Main Executable
@@ -234,6 +256,7 @@ target_link_libraries(lagari_vision PRIVATE
     lagari_guidance
     lagari_comms
     lagari_recording
+    lagari_display
 )
 
 # ============================================================================
@@ -278,6 +301,10 @@ message(STATUS "  TensorRT: ${HAS_TENSORRT}")
 message(STATUS "  HailoRT: ${HAS_HAILO}")
 message(STATUS "  NCNN: ${HAS_NCNN}")
 message(STATUS "  OpenVINO: ${HAS_OPENVINO}")
+message(STATUS "")
+message(STATUS "Output modules:")
+message(STATUS "  Display (GStreamer): ${HAS_GSTREAMER}")
+message(STATUS "  Recording (GStreamer): ${HAS_GSTREAMER}")
 message(STATUS "")
 message(STATUS "Build tests: ${BUILD_TESTS}")
 message(STATUS "==========================================")
