@@ -107,6 +107,20 @@ detection:
   batch_size: 1
   dla_core: -1                   # -1 = disabled
 
+  # OpenVINO-specific settings
+  openvino:
+    device: CPU                  # CPU, GPU, AUTO
+
+  # NCNN-specific settings
+  ncnn:
+    threads: 4                   # Number of threads
+    vulkan: false                # Use Vulkan GPU acceleration
+
+  # ONNX Runtime-specific settings
+  onnxruntime:
+    provider: cpu                # cpu, cuda, tensorrt, directml, coreml
+    device_id: 0                 # Device ID for GPU providers
+
 # QR Decoding
 qr:
   enabled: true

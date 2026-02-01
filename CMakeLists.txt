@@ -145,6 +145,10 @@ if(HAS_OPENVINO)
     list(APPEND DETECTION_SOURCES src/detection/openvino_detector.cpp)
 endif()
 
+if(HAS_ONNXRUNTIME)
+    list(APPEND DETECTION_SOURCES src/detection/onnxruntime_detector.cpp)
+endif()
+
 add_library(lagari_detection STATIC ${DETECTION_SOURCES})
 target_link_libraries(lagari_detection PUBLIC
     lagari_core
@@ -169,6 +173,16 @@ endif()
 if(HAS_OPENVINO)
     target_link_libraries(lagari_detection PRIVATE openvino::runtime)
     target_compile_definitions(lagari_detection PRIVATE HAS_OPENVINO)
+endif()
+
+if(HAS_ONNXRUNTIME)
+    if(onnxruntime_FOUND)
+        target_link_libraries(lagari_detection PRIVATE onnxruntime::onnxruntime)
+    else()
+        target_link_libraries(lagari_detection PRIVATE ${ONNXRUNTIME_LIBRARIES})
+        target_include_directories(lagari_detection PRIVATE ${ONNXRUNTIME_INCLUDE_DIRS})
+    endif()
+    target_compile_definitions(lagari_detection PRIVATE HAS_ONNXRUNTIME)
 endif()
 
 # ============================================================================
@@ -301,6 +315,7 @@ message(STATUS "  TensorRT: ${HAS_TENSORRT}")
 message(STATUS "  HailoRT: ${HAS_HAILO}")
 message(STATUS "  NCNN: ${HAS_NCNN}")
 message(STATUS "  OpenVINO: ${HAS_OPENVINO}")
+message(STATUS "  ONNX Runtime: ${HAS_ONNXRUNTIME}")
 message(STATUS "")
 message(STATUS "Output modules:")
 message(STATUS "  Display (GStreamer): ${HAS_GSTREAMER}")
