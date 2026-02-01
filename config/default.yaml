@@ -1,0 +1,189 @@
+# Lagari Vision System - Default Configuration
+# ============================================
+
+# Logging
+logging:
+  level: info                    # trace, debug, info, warn, error, critical
+  file: /var/log/lagari/vision.log
+  console: true
+  file_level: debug
+
+# System
+system:
+  target_fps: 30                 # Target processing framerate
+  max_latency_ms: 50             # Maximum acceptable latency
+  state_machine:
+    initial_state: idle          # idle, searching
+    auto_start: false            # Start processing on boot
+
+# Capture
+capture:
+  source: auto                   # auto, csi, usb, file, rtsp, simulation
+  width: 1280
+  height: 720
+  fps: 30
+  format: bgr24                  # bgr24, rgb24, nv12
+  device: ""                     # Device path or ID (auto-detect if empty)
+  camera_id: 0
+  
+  # Buffer settings
+  buffer_count: 4
+  drop_frames: true
+  
+  # Image adjustments
+  auto_exposure: true
+  flip_horizontal: false
+  flip_vertical: false
+  rotation: 0                    # 0, 90, 180, 270
+  
+  # File/simulation source
+  file_path: ""
+  loop_file: true
+
+# Detection
+detection:
+  backend: auto                  # auto, tensorrt, hailo, ncnn, openvino
+  yolo_version: yolov8           # yolov5, yolov7, yolov8, yolov9, yolov10, yolo11
+  
+  model_path: models/yolov8n.engine
+  labels_path: models/coco.names
+  
+  input_width: 640
+  input_height: 640
+  
+  confidence_threshold: 0.5
+  nms_threshold: 0.45
+  max_detections: 100
+  
+  # Target classes (empty = all)
+  # For UAV detection, you might want specific classes
+  target_classes: []
+  
+  # Performance tuning
+  fp16: true
+  int8: false
+  batch_size: 1
+  dla_core: -1                   # -1 = disabled
+
+# QR Decoding
+qr:
+  enabled: true
+  qr_class_id: -1                # Class ID for QR codes (-1 = no detection filter)
+  decode_full_frame: false       # Try decoding full frame if no QR detected
+  
+  # Multi-attempt decoding
+  max_attempts: 3
+  preprocessing:
+    - none
+    - sharpen
+    - adaptive_threshold
+  
+  # Result caching
+  cache_ttl_ms: 1000             # Cache results for 1 second
+
+# Guidance
+guidance:
+  enabled: true
+  algorithm: pid                 # pid, mpc, custom
+  target_class_id: 0             # Class ID to track
+  
+  # PID gains
+  pid:
+    roll:
+      kp: 0.5
+      ki: 0.01
+      kd: 0.1
+    pitch:
+      kp: 0.5
+      ki: 0.01
+      kd: 0.1
+    yaw:
+      kp: 0.3
+      ki: 0.0
+      kd: 0.05
+  
+  # Safety limits
+  max_roll_deg: 15.0
+  max_pitch_deg: 15.0
+  max_yaw_rate_dps: 30.0
+  
+  # Control rate
+  update_rate_hz: 50
+
+# Autopilot Communication
+autopilot:
+  enabled: true
+  connection: udp://:14540       # MAVLink connection string
+  # Alternatives:
+  # - serial:///dev/ttyTHS1:921600
+  # - tcp://127.0.0.1:5760
+  
+  system_id: 1
+  component_id: 196              # MAV_COMP_ID_USER1
+  
+  heartbeat_interval_ms: 1000
+  timeout_ms: 5000
+  
+  # Command mode
+  offboard_mode: attitude        # attitude, velocity, position
+
+# Telemetry (to GCS)
+telemetry:
+  enabled: true
+  host: 0.0.0.0
+  port: 5600
+  
+  # Data telemetry
+  data:
+    enabled: true
+    port: 5601
+    rate_hz: 10
+  
+  # Video streaming
+  video:
+    enabled: true
+    port: 5602
+    codec: h264
+    bitrate_kbps: 2000
+    gop: 30
+
+# Recording
+recording:
+  enabled: true
+  output_dir: /var/lagari/recordings
+  
+  # Video settings
+  codec: h264
+  bitrate_kbps: 8000
+  fps: 30
+  
+  # Overlay
+  overlay:
+    enabled: true
+    timestamp: true
+    bounding_boxes: true
+    state: true
+    latency: true
+  
+  # Triggers
+  trigger: manual                # manual, auto, detection
+  auto_start_delay_s: 5
+  
+  # Storage management
+  max_storage_gb: 10
+  delete_oldest: true
+
+# Performance monitoring
+performance:
+  enabled: true
+  log_interval_s: 10
+  
+  # Telemetry export
+  export_to_gcs: false
+  
+  # Alerts
+  alerts:
+    high_latency_ms: 100
+    low_fps: 15
+    high_cpu_percent: 80
+    high_memory_percent: 80

@@ -1,0 +1,47 @@
+# Build directories
+build/
+out/
+cmake-build-*/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Compiled files
+*.o
+*.a
+*.so
+*.dylib
+
+# Binary
+lagari_vision
+
+# Dependencies (if vendored)
+third_party/*/
+
+# Generated files
+compile_commands.json
+
+# Logs
+*.log
+logs/
+
+# Recordings
+recordings/
+
+# Models (large files)
+models/*.engine
+models/*.onnx
+models/*.hef
+models/*.bin
+models/*.param
+
+# Config overrides
+config/local.yaml
+
+# OS files
+.DS_Store
+Thumbs.db

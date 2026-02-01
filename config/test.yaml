@@ -1,0 +1,55 @@
+# Lagari Vision - Test Configuration
+# For x86 development with simulated input
+
+logging:
+  level: debug
+  file: ""
+  console: true
+
+system:
+  target_fps: 30
+  max_latency_ms: 100
+  state_machine:
+    initial_state: searching
+    auto_start: true
+
+capture:
+  source: simulation
+  width: 1280
+  height: 720
+  fps: 30
+  
+  # Simulation settings
+  file_path: ""
+  loop_file: true
+
+detection:
+  backend: auto
+  yolo_version: yolov8
+  model_path: models/yolov8n.onnx
+  labels_path: models/coco.names
+  
+  input_width: 640
+  input_height: 640
+  confidence_threshold: 0.25
+  nms_threshold: 0.45
+
+qr:
+  enabled: true
+  decode_full_frame: true
+
+guidance:
+  enabled: false                 # Disabled for testing
+  
+autopilot:
+  enabled: false                 # Disabled for testing
+
+telemetry:
+  enabled: false
+
+recording:
+  enabled: false
+
+performance:
+  enabled: true
+  log_interval_s: 5
