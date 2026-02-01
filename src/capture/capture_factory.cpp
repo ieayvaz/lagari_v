@@ -6,12 +6,20 @@
 #include "lagari/capture/v4l2_capture.hpp"
 #endif
 
+#ifdef HAS_ARGUS
+#include "lagari/capture/argus_capture.hpp"
+#endif
+
+#ifdef HAS_LIBCAMERA
+#include "lagari/capture/libcamera_capture.hpp"
+#endif
+
+#ifdef HAS_GSTREAMER
+#include "lagari/capture/gstreamer_capture.hpp"
+#endif
+
 #include "lagari/capture/sim_capture.hpp"
 #include "lagari/capture/isaac_shm_capture.hpp"
-
-// Forward declarations for other backends
-// #include "lagari/capture/argus_capture.hpp"
-// #include "lagari/capture/libcamera_capture.hpp"
 
 namespace lagari {
 
@@ -23,6 +31,7 @@ std::unique_ptr<ICapture> create_capture(const Config& config) {
     else if (source_str == "usb") cc.source = CaptureSource::USB;
     else if (source_str == "file") cc.source = CaptureSource::FILE;
     else if (source_str == "rtsp") cc.source = CaptureSource::RTSP;
+    else if (source_str == "gstreamer") cc.source = CaptureSource::GSTREAMER;
     else if (source_str == "simulation") cc.source = CaptureSource::SIMULATION;
     else if (source_str == "isaac" || source_str == "isaac_sim") cc.source = CaptureSource::ISAAC_SIM;
     else cc.source = CaptureSource::AUTO;
@@ -44,7 +53,7 @@ std::unique_ptr<ICapture> create_capture(const Config& config) {
     // For platform-dependent source, we need to create the right type
     auto capture = create_capture(cc);
     
-    // Initialize with full config (for Isaac Sim settings, etc.)
+    // Initialize with full config (for backend-specific settings)
     if (capture) {
         if (!capture->initialize(config)) {
             LOG_ERROR("Failed to initialize capture");
@@ -80,13 +89,9 @@ std::unique_ptr<ICapture> create_capture(const CaptureConfig& config) {
     switch (source) {
         case CaptureSource::CSI:
 #if defined(PLATFORM_JETSON) && defined(HAS_ARGUS)
-            // return std::make_unique<ArgusCapture>(config);
-            LOG_WARN("Argus capture not yet implemented");
-            break;
+            return std::make_unique<ArgusCapture>(config);
 #elif defined(PLATFORM_RPI) && defined(HAS_LIBCAMERA)
-            // return std::make_unique<LibcameraCapture>(config);
-            LOG_WARN("libcamera capture not yet implemented");
-            break;
+            return std::make_unique<LibcameraCapture>(config);
 #else
             LOG_WARN("CSI capture not available on this platform");
             break;
@@ -102,9 +107,21 @@ std::unique_ptr<ICapture> create_capture(const CaptureConfig& config) {
 
         case CaptureSource::FILE:
         case CaptureSource::RTSP:
-            // TODO: Implement file/RTSP capture using OpenCV or GStreamer
-            LOG_WARN("File/RTSP capture not yet implemented");
+#ifdef HAS_GSTREAMER
+            // Use GStreamer for file/RTSP sources
+            return std::make_unique<GstreamerCapture>(config);
+#else
+            LOG_WARN("File/RTSP capture requires GStreamer (HAS_GSTREAMER not defined)");
             break;
+#endif
+
+        case CaptureSource::GSTREAMER:
+#ifdef HAS_GSTREAMER
+            return std::make_unique<GstreamerCapture>(config);
+#else
+            LOG_WARN("GStreamer not available");
+            break;
+#endif
 
         case CaptureSource::ISAAC_SIM:
             // Isaac Sim via shared memory (high performance)

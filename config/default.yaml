@@ -47,6 +47,41 @@ capture:
     reconnect: true                # Auto-reconnect if detached
     reconnect_delay_ms: 1000       # Delay before reconnect attempt
 
+  # NVIDIA Argus settings (Jetson CSI cameras)
+  argus:
+    sensor_mode: 0                 # Sensor mode index
+    denoise: true                  # Enable denoising
+    denoise_strength: 0.5          # Denoise strength (0-1)
+    edge_enhance: true             # Enable edge enhancement
+    edge_enhance_strength: 0.5     # Edge enhance strength (0-1)
+    awb: true                      # Auto white balance
+
+  # libcamera settings (Raspberry Pi cameras)
+  libcamera:
+    ae_enable: true                # Auto exposure
+    exposure_us: 0                 # Manual exposure (0 = auto)
+    gain: 1.0                      # Analogue gain
+    awb: true                      # Auto white balance
+    brightness: 0.0                # Brightness (-1 to 1)
+    contrast: 1.0                  # Contrast (0 to 2)
+    saturation: 1.0                # Saturation (0 to 2)
+    sharpness: 1.0                 # Sharpness (0 to 2)
+    denoise: 2                     # 0=off, 1=fast, 2=high quality
+
+  # GStreamer settings (for file, rtsp, gstreamer sources)
+  gstreamer:
+    source_type: auto              # auto, v4l2, rtsp, file, http, test, uri, argus, libcamera
+    pipeline: ""                   # Custom pipeline (overrides other settings)
+    uri: ""                        # URI for rtsp/http/file sources
+    latency_ms: 200                # RTSP latency/buffer
+    tcp_timeout: 5000000           # Connection timeout (µs)
+    use_tcp: true                  # Use TCP for RTP transport
+    drop_on_latency: true          # Drop frames if behind
+    hw_decode: true                # Use hardware decoding
+    decoder: ""                    # Specific decoder (empty = auto)
+    sync: false                    # Sync to clock
+    queue_size: 2                  # AppSink buffer size
+
 # Detection
 detection:
   backend: auto                  # auto, tensorrt, hailo, ncnn, openvino

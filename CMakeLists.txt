@@ -91,6 +91,10 @@ if(HAS_V4L2)
     list(APPEND CAPTURE_SOURCES src/capture/v4l2_capture.cpp)
 endif()
 
+if(HAS_GSTREAMER)
+    list(APPEND CAPTURE_SOURCES src/capture/gstreamer_capture.cpp)
+endif()
+
 add_library(lagari_capture STATIC ${CAPTURE_SOURCES})
 target_link_libraries(lagari_capture PUBLIC
     lagari_core
@@ -110,6 +114,11 @@ endif()
 
 if(HAS_V4L2)
     target_compile_definitions(lagari_capture PRIVATE HAS_V4L2)
+endif()
+
+if(HAS_GSTREAMER)
+    target_link_libraries(lagari_capture PRIVATE ${GSTREAMER_LIBRARIES})
+    target_compile_definitions(lagari_capture PRIVATE HAS_GSTREAMER)
 endif()
 
 # ============================================================================
@@ -261,6 +270,7 @@ message(STATUS "Capture backends:")
 message(STATUS "  Argus (Jetson): ${HAS_ARGUS}")
 message(STATUS "  libcamera (RPi): ${HAS_LIBCAMERA}")
 message(STATUS "  V4L2: ${HAS_V4L2}")
+message(STATUS "  GStreamer: ${HAS_GSTREAMER}")
 message(STATUS "  Isaac Sim (SHM): TRUE")  # Always available on Linux
 message(STATUS "")
 message(STATUS "Inference backends:")

@@ -84,6 +84,20 @@ if(V4L2_INCLUDE_DIR)
     message(STATUS "Found V4L2 headers")
 endif()
 
+# GStreamer
+set(HAS_GSTREAMER FALSE)
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(GSTREAMER gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0)
+    if(GSTREAMER_FOUND)
+        set(HAS_GSTREAMER TRUE)
+        set(GSTREAMER_LIBRARIES ${GSTREAMER_LIBRARIES})
+        include_directories(${GSTREAMER_INCLUDE_DIRS})
+        link_directories(${GSTREAMER_LIBRARY_DIRS})
+        message(STATUS "Found GStreamer: ${GSTREAMER_VERSION}")
+    endif()
+endif()
+
 # ============================================================================
 # Inference Backend Detection
 # ============================================================================

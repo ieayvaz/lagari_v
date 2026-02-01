@@ -18,8 +18,9 @@ enum class CaptureSource : uint8_t {
     USB,            // USB camera (V4L2)
     FILE,           // Video file or image sequence
     RTSP,           // RTSP stream
+    GSTREAMER,      // GStreamer pipeline (generic)
     SIMULATION,     // Simulated frames for testing
-    ISAAC_SIM       // Isaac Sim via ZeroMQ
+    ISAAC_SIM       // Isaac Sim via shared memory
 };
 
 inline const char* to_string(CaptureSource source) {
@@ -29,6 +30,7 @@ inline const char* to_string(CaptureSource source) {
         case CaptureSource::USB: return "USB";
         case CaptureSource::FILE: return "FILE";
         case CaptureSource::RTSP: return "RTSP";
+        case CaptureSource::GSTREAMER: return "GSTREAMER";
         case CaptureSource::SIMULATION: return "SIMULATION";
         case CaptureSource::ISAAC_SIM: return "ISAAC_SIM";
         default: return "UNKNOWN";
