@@ -138,7 +138,139 @@ Inference backends:
   HailoRT: FALSE
   NCNN: FALSE
   OpenVINO: FALSE
+  ONNX Runtime: FALSE
 ==========================================
+```
+
+## Detection Backends Installation
+
+### TensorRT (Jetson / x86 with NVIDIA GPU)
+
+Best performance on NVIDIA hardware. Supports FP16, INT8, and DLA acceleration.
+
+**Jetson (pre-installed):**
+```bash
+# TensorRT comes with JetPack SDK
+sudo apt install nvidia-tensorrt
+```
+
+**x86 with NVIDIA GPU:**
+```bash
+# Install CUDA Toolkit first
+wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+sudo dpkg -i cuda-keyring_1.1-1_all.deb
+sudo apt update && sudo apt install cuda-toolkit-12-2
+
+# Install TensorRT
+sudo apt install tensorrt libnvinfer-dev libnvonnxparsers-dev
+```
+
+### OpenVINO (Intel CPU)
+
+Optimized for Intel processors with AVX/AVX2/AVX512.
+
+```bash
+# Ubuntu/Debian
+wget https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
+sudo apt-key add GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
+echo "deb https://apt.repos.intel.com/openvino/2024 ubuntu22 main" | sudo tee /etc/apt/sources.list.d/intel-openvino.list
+sudo apt update && sudo apt install openvino
+
+# Or via pip (for Python tools)
+pip install openvino
+```
+
+### NCNN (ARM / Raspberry Pi)
+
+Lightweight inference for ARM CPUs with optional Vulkan GPU support.
+
+```bash
+# Build from source (recommended)
+git clone https://github.com/Tencent/ncnn.git
+cd ncnn && mkdir build && cd build
+cmake -DCMAKE_BUILD_TYPE=Release \
+      -DNCNN_VULKAN=ON \
+      -DNCNN_BUILD_EXAMPLES=OFF \
+      ..
+make -j$(nproc)
+sudo make install
+
+# Raspberry Pi (apt)
+sudo apt install libncnn-dev
+```
+
+### ONNX Runtime (Cross-platform)
+
+Works on all platforms with optional GPU acceleration.
+
+```bash
+# Ubuntu/Debian (CPU)
+pip install onnxruntime
+
+# With CUDA support
+pip install onnxruntime-gpu
+
+# C++ library
+wget https://github.com/microsoft/onnxruntime/releases/download/v1.17.0/onnxruntime-linux-x64-1.17.0.tgz
+tar xzf onnxruntime-linux-x64-1.17.0.tgz
+sudo cp -r onnxruntime-linux-x64-1.17.0/include/* /usr/local/include/
+sudo cp -r onnxruntime-linux-x64-1.17.0/lib/* /usr/local/lib/
+sudo ldconfig
+```
+
+### Model Conversion
+
+Convert YOLO models to the appropriate format for each backend:
+
+```bash
+cd scripts/model_conversion
+
+# Download and convert for your platform
+python download_models.py yolo11n tensorrt --fp16   # Jetson/GPU
+python download_models.py yolo11n openvino          # Intel CPU
+python download_models.py yolo11n ncnn              # Raspberry Pi
+
+# Or convert custom models
+python convert_model.py --model best.pt --format all
+```
+
+### Detection Backend Comparison
+
+| Backend | Platform | Speed | Model Format | Best For |
+|---------|----------|-------|--------------|----------|
+| TensorRT | Jetson/NVIDIA | ⚡⚡⚡ | `.engine` | Production on NVIDIA |
+| OpenVINO | Intel CPU | ⚡⚡ | `.xml/.bin` | Intel desktops/servers |
+| NCNN | ARM | ⚡⚡ | `.param/.bin` | Raspberry Pi, mobile |
+| ONNX Runtime | All | ⚡ | `.onnx` | Development, portability |
+
+### Detection Configuration
+
+```yaml
+detection:
+  backend: auto              # auto, tensorrt, openvino, ncnn, onnxruntime
+  yolo_version: yolo11       # yolov5, yolov8, yolov10, yolo11
+  model_path: models/yolo11n.engine
+  labels_path: models/coco.names
+  
+  input_width: 640
+  input_height: 640
+  confidence_threshold: 0.5
+  nms_threshold: 0.45
+  
+  fp16: true                 # Half precision (faster)
+  int8: false                # INT8 quantization (fastest, requires calibration)
+  
+  # Backend-specific
+  openvino:
+    device: CPU              # CPU, GPU, AUTO
+    
+  ncnn:
+    threads: 4
+    vulkan: false
+    
+  onnxruntime:
+    provider: cpu            # cpu, cuda, tensorrt
+    device_id: 0
 ```
 
 ## Usage
