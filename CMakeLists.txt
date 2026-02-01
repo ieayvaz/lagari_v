@@ -63,6 +63,7 @@ add_library(lagari_core STATIC
 target_include_directories(lagari_core PUBLIC 
     ${CMAKE_SOURCE_DIR}/include
 )
+
 target_link_libraries(lagari_core PUBLIC
     yaml-cpp
     spdlog::spdlog
@@ -176,7 +177,6 @@ target_link_libraries(lagari_qr PUBLIC
 # ============================================================================
 add_library(lagari_guidance STATIC
     src/guidance/guidance.cpp
-    src/guidance/pid_controller.cpp
     src/guidance/tracker.cpp
 )
 target_link_libraries(lagari_guidance PUBLIC

@@ -4,6 +4,7 @@
 #include <string>
 #include <string_view>
 
+#include <spdlog/spdlog.h>
 // Forward declaration for spdlog
 namespace spdlog {
 class logger;

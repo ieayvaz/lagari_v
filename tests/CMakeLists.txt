@@ -58,6 +58,20 @@ target_link_libraries(test_pid_controller
 )
 gtest_discover_tests(test_pid_controller)
 
+# Capture tests
+add_executable(test_capture
+    unit/test_capture.cpp
+)
+target_link_libraries(test_capture
+    lagari_capture
+    GTest::gtest_main
+    GTest::gmock
+)
+if(HAS_V4L2)
+    target_compile_definitions(test_capture PRIVATE HAS_V4L2)
+endif()
+gtest_discover_tests(test_capture)
+
 # ============================================================================
 # Integration Tests
 # ============================================================================

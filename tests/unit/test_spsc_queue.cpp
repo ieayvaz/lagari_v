@@ -3,6 +3,8 @@
 
 #include "lagari/core/spsc_queue.hpp"
 
+#include <lagari/core/config.hpp>
+
 #include <thread>
 #include <vector>
 #include <numeric>
@@ -132,6 +134,7 @@ TEST_F(SPSCQueueTest, ProducerConsumer) {
 TEST_F(SPSCQueueTest, MoveSemantics) {
     struct MoveOnly {
         int value;
+        MoveOnly() = default;
         MoveOnly(int v) : value(v) {}
         MoveOnly(const MoveOnly&) = delete;
         MoveOnly& operator=(const MoveOnly&) = delete;

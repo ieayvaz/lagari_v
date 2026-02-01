@@ -2,6 +2,7 @@
 #include <gmock/gmock.h>
 
 #include "lagari/core/ring_buffer.hpp"
+#include "lagari/core/config.hpp"
 
 #include <thread>
 #include <vector>

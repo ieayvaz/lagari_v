@@ -2,6 +2,15 @@
 #include "lagari/core/config.hpp"
 #include "lagari/core/logger.hpp"
 
+#ifdef HAS_V4L2
+#include "lagari/capture/v4l2_capture.hpp"
+#endif
+
+// Forward declarations for other backends
+// #include "lagari/capture/argus_capture.hpp"
+// #include "lagari/capture/libcamera_capture.hpp"
+// #include "lagari/capture/sim_capture.hpp"
+
 namespace lagari {
 
 std::unique_ptr<ICapture> create_capture(const Config& config) {
@@ -33,8 +42,6 @@ std::unique_ptr<ICapture> create_capture(const Config& config) {
 }
 
 std::unique_ptr<ICapture> create_capture(const CaptureConfig& config) {
-    // TODO: Implement capture factory based on source and platform
-    
     LOG_INFO("Creating capture with source: {}", to_string(config.source));
     
     CaptureSource source = config.source;
@@ -43,44 +50,60 @@ std::unique_ptr<ICapture> create_capture(const CaptureConfig& config) {
         // Auto-detect based on platform
 #if defined(PLATFORM_JETSON) && defined(HAS_ARGUS)
         source = CaptureSource::CSI;
+        LOG_INFO("Auto-detected: Jetson with Argus");
 #elif defined(PLATFORM_RPI) && defined(HAS_LIBCAMERA)
         source = CaptureSource::CSI;
+        LOG_INFO("Auto-detected: Raspberry Pi with libcamera");
 #elif defined(HAS_V4L2)
         source = CaptureSource::USB;
+        LOG_INFO("Auto-detected: V4L2 for USB camera");
 #else
         source = CaptureSource::SIMULATION;
+        LOG_INFO("Auto-detected: Simulation (no hardware capture available)");
 #endif
     }
-    
+
     switch (source) {
         case CaptureSource::CSI:
 #if defined(PLATFORM_JETSON) && defined(HAS_ARGUS)
             // return std::make_unique<ArgusCapture>(config);
+            LOG_WARN("Argus capture not yet implemented");
+            break;
 #elif defined(PLATFORM_RPI) && defined(HAS_LIBCAMERA)
             // return std::make_unique<LibcameraCapture>(config);
+            LOG_WARN("libcamera capture not yet implemented");
+            break;
+#else
+            LOG_WARN("CSI capture not available on this platform");
+            break;
 #endif
-            LOG_WARN("CSI capture not available, falling back to simulation");
-            [[fallthrough]];
-            
+
         case CaptureSource::USB:
 #ifdef HAS_V4L2
-            // return std::make_unique<V4L2Capture>(config);
+            return std::make_unique<V4L2Capture>(config);
+#else
+            LOG_WARN("V4L2 not available");
+            break;
 #endif
-            LOG_WARN("V4L2 capture not available, falling back to simulation");
-            [[fallthrough]];
-            
+
         case CaptureSource::FILE:
         case CaptureSource::RTSP:
-            // return std::make_unique<FileCapture>(config);
-            LOG_WARN("File/RTSP capture not implemented");
-            [[fallthrough]];
-            
+            // TODO: Implement file/RTSP capture using OpenCV or GStreamer
+            LOG_WARN("File/RTSP capture not yet implemented");
+            break;
+
         case CaptureSource::SIMULATION:
+            // TODO: Implement simulation capture
+            LOG_WARN("Simulation capture not yet implemented");
+            break;
+
+        case CaptureSource::AUTO:
         default:
-            // return std::make_unique<SimCapture>(config);
-            LOG_WARN("Capture implementations not yet available");
-            return nullptr;
+            LOG_ERROR("Could not determine capture source");
+            break;
     }
+
+    return nullptr;
 }
 
 }  // namespace lagari

@@ -11,6 +11,10 @@ namespace lagari {
 // ============================================================================
 // Implementation details
 // ============================================================================
+
+Config::~Config() = default;
+Config::Config() = default;
+
 struct Config::Impl {
     YAML::Node root;
     
@@ -21,15 +25,21 @@ struct Config::Impl {
         while (std::getline(ss, part, '.')) {
             parts.push_back(part);
         }
-        
-        YAML::Node node = YAML::Clone(root);
+        YAML::Node current = root;
         for (const auto& p : parts) {
-            if (!node || !node.IsMap()) {
+            if(!current || !current.IsMap()) {
                 return YAML::Node();
             }
-            node = node[p];
+            const YAML::Node& const_curr = current;
+            YAML::Node next = const_curr[p];
+
+            if (!next.IsDefined()) {
+                return YAML::Node(YAML::NodeType::Undefined);
+            }
+            current = next;
         }
-        return node;
+
+        return current;
     }
 };
 

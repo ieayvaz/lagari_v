@@ -22,8 +22,8 @@ namespace lagari {
  */
 class Config {
 public:
-    Config() = default;
-    ~Config() = default;
+    Config();
+    ~Config();
 
     // Non-copyable, moveable
     Config(const Config&) = delete;

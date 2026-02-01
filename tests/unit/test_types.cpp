@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "lagari/core/types.hpp"
+#include "lagari/core/config.hpp"
 
 using namespace lagari;
 
@@ -79,9 +80,9 @@ TEST(TypesTest, BoundingBoxIoU) {
 
 TEST(TypesTest, DetectionResultFindByClass) {
     DetectionResult result;
-    result.detections.push_back(Detection{{0.5f, 0.5f, 0.1f, 0.1f}, 0.9f, 0, "person"});
-    result.detections.push_back(Detection{{0.3f, 0.3f, 0.2f, 0.2f}, 0.8f, 1, "car"});
-    result.detections.push_back(Detection{{0.7f, 0.7f, 0.1f, 0.1f}, 0.7f, 2, "dog"});
+    result.detections.push_back(Detection{{0.5f, 0.5f, 0.1f, 0.1f}, 0.9f, 0, "person",-1});
+    result.detections.push_back(Detection{{0.3f, 0.3f, 0.2f, 0.2f}, 0.8f, 1, "car",-1});
+    result.detections.push_back(Detection{{0.7f, 0.7f, 0.1f, 0.1f}, 0.7f, 2, "dog",-1});
     
     auto person = result.find_by_class(0);
     ASSERT_TRUE(person.has_value());
@@ -93,9 +94,9 @@ TEST(TypesTest, DetectionResultFindByClass) {
 
 TEST(TypesTest, DetectionResultBest) {
     DetectionResult result;
-    result.detections.push_back(Detection{{0.5f, 0.5f, 0.1f, 0.1f}, 0.7f, 0, "a"});
-    result.detections.push_back(Detection{{0.3f, 0.3f, 0.2f, 0.2f}, 0.95f, 1, "b"});
-    result.detections.push_back(Detection{{0.7f, 0.7f, 0.1f, 0.1f}, 0.8f, 2, "c"});
+    result.detections.push_back(Detection{{0.5f, 0.5f, 0.1f, 0.1f}, 0.7f, 0, "a",-1});
+    result.detections.push_back(Detection{{0.3f, 0.3f, 0.2f, 0.2f}, 0.95f, 1, "b",-1});
+    result.detections.push_back(Detection{{0.7f, 0.7f, 0.1f, 0.1f}, 0.8f, 2, "c",-1});
     
     auto best = result.best();
     ASSERT_TRUE(best.has_value());

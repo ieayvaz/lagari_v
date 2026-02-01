@@ -7,6 +7,7 @@
 #include <vector>
 #include <array>
 #include <optional>
+#include <algorithm>
 
 namespace lagari {
 

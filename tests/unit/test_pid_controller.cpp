@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "lagari/guidance/guidance.hpp"
+#include "lagari/core/config.hpp"
 
 using namespace lagari;
 
