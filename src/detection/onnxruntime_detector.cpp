@@ -142,20 +142,14 @@ bool ONNXRuntimeDetector::load_model(const std::string& model_path) {
         // Set execution provider
         switch (provider_) {
             case ExecutionProvider::CUDA:
-#ifdef USE_CUDA
                 {
                     OrtCUDAProviderOptions cuda_options;
                     cuda_options.device_id = device_id_;
                     ort_->session_options.AppendExecutionProvider_CUDA(cuda_options);
                     LOG_INFO("ONNXRuntimeDetector: Using CUDA execution provider");
                 }
-#else
-                LOG_WARN("ONNXRuntimeDetector: CUDA not available, falling back to CPU");
-#endif
                 break;
-                
             case ExecutionProvider::TENSORRT:
-#ifdef USE_TENSORRT
                 {
                     OrtTensorRTProviderOptions trt_options;
                     trt_options.device_id = device_id_;
@@ -163,11 +157,7 @@ bool ONNXRuntimeDetector::load_model(const std::string& model_path) {
                     ort_->session_options.AppendExecutionProvider_TensorRT(trt_options);
                     LOG_INFO("ONNXRuntimeDetector: Using TensorRT execution provider");
                 }
-#else
-                LOG_WARN("ONNXRuntimeDetector: TensorRT not available, falling back to CPU");
-#endif
                 break;
-                
             case ExecutionProvider::CPU:
             default:
                 LOG_INFO("ONNXRuntimeDetector: Using CPU execution provider");
