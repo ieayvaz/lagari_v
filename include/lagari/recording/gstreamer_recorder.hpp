@@ -50,7 +50,9 @@ public:
     bool is_recording() const override;
     
     void add_frame(const Frame& frame, 
-                  const DetectionResult* detections = nullptr) override;
+                  const DetectionResult* detections,
+                  SystemState state,
+                  Duration latency) override;
     
     void set_overlay_enabled(bool enabled) override;
     std::string current_filename() const override;
@@ -68,7 +70,8 @@ private:
     // Pipeline management
     bool create_pipeline(const std::string& filename);
     void destroy_pipeline();
-    bool push_buffer(const uint8_t* data, size_t size, uint32_t width, uint32_t height);
+    bool push_buffer(const uint8_t* data, size_t size, uint32_t width, uint32_t height,
+                     TimePoint frame_timestamp);
 
     // File management
     std::string generate_filename() const;

@@ -16,6 +16,7 @@ struct OverlayConfig {
     bool bounding_boxes = true;     // Draw detection bounding boxes
     bool state = true;              // Show system state
     bool latency = true;            // Show processing latency
+    bool fps = true;                // Show current FPS
     
     // Style configuration
     float font_scale = 0.6f;
@@ -103,11 +104,17 @@ private:
     void draw_timestamp(cv::Mat& image);
     void draw_state(cv::Mat& image, SystemState state);
     void draw_latency(cv::Mat& image, Duration latency);
+    void draw_fps(cv::Mat& image);
     void draw_text_with_background(cv::Mat& image, const std::string& text,
                                    cv::Point position, cv::Scalar text_color,
                                    cv::Scalar bg_color);
 
     OverlayConfig config_;
+    
+    // FPS tracking
+    TimePoint last_frame_time_;
+    double current_fps_{0.0};
+    double fps_alpha_{0.1};  // Smoothing factor for exponential moving average
 };
 
 /**

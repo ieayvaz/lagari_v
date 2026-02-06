@@ -148,6 +148,18 @@ void OverlayRenderer::render_inplace(cv::Mat& image,
         return;
     }
 
+    // Update FPS tracking
+    auto now = Clock::now();
+    if (last_frame_time_.time_since_epoch().count() > 0) {
+        auto frame_duration = std::chrono::duration<double>(now - last_frame_time_).count();
+        if (frame_duration > 0.0) {
+            double instant_fps = 1.0 / frame_duration;
+            // Exponential moving average for smooth display
+            current_fps_ = fps_alpha_ * instant_fps + (1.0 - fps_alpha_) * current_fps_;
+        }
+    }
+    last_frame_time_ = now;
+
     // Convert to BGR if needed for drawing
     if (image.channels() == 1) {
         cv::cvtColor(image, image, cv::COLOR_GRAY2BGR);
@@ -170,6 +182,10 @@ void OverlayRenderer::render_inplace(cv::Mat& image,
 
     if (config_.latency) {
         draw_latency(image, latency);
+    }
+    
+    if (config_.fps) {
+        draw_fps(image);
     }
 }
 
@@ -295,10 +311,34 @@ void OverlayRenderer::draw_latency(cv::Mat& image, Duration latency)
         color = cv::Scalar(0, 0, 255);  // Red
     }
 
-    // Draw below timestamp
+    // Draw below timestamp (at y=50)
     draw_text_with_background(
         image, oss.str(),
         cv::Point(10, 50),
+        config_.colors.text_color,
+        color
+    );
+}
+
+void OverlayRenderer::draw_fps(cv::Mat& image)
+{
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(1) << "FPS: " << current_fps_;
+
+    // Color based on FPS (green >= 20, yellow >= 10, red < 10)
+    cv::Scalar color;
+    if (current_fps_ >= 20.0) {
+        color = cv::Scalar(0, 255, 0);  // Green
+    } else if (current_fps_ >= 10.0) {
+        color = cv::Scalar(0, 255, 255);  // Yellow
+    } else {
+        color = cv::Scalar(0, 0, 255);  // Red
+    }
+
+    // Draw below latency (at y=75)
+    draw_text_with_background(
+        image, oss.str(),
+        cv::Point(10, 75),
         config_.colors.text_color,
         color
     );

@@ -18,7 +18,7 @@ system:
 
 # Capture
 capture:
-  source: gstreamer                   # auto, csi, usb, file, rtsp, simulation, isaac
+  source: usb                   # auto, csi, usb, file, rtsp, simulation, isaac
   width: 1280
   height: 720
   fps: 30
@@ -70,8 +70,8 @@ capture:
 
   # GStreamer settings (for file, rtsp, gstreamer sources)
   gstreamer:
-    source_type: auto               # auto, v4l2, rtsp, file, http, test, uri, argus, libcamera
-    pipeline: "udpsrc port=5600 ! rtph264depay ! decodebin ! videoconvert ! video/x-raw, format=BGR"                   # Custom pipeline (overrides other settings)
+    source_type: uri               # auto, v4l2, rtsp, file, http, test, uri, argus, libcamera
+    pipeline: "udpsrc port=5600 caps=\"application/x-rtp, media=(string)video, clock-rate=(int)90000, encoding-name=(string)H264, payload=(int)96\" ! rtph264depay ! decodebin ! videoconvert ! video/x-raw,format=BGR ! appsink name=sink max-buffers=2 drop=true sync=false emit-signals=false"                   # Custom pipeline (overrides other settings)
     uri: ""                        # URI for rtsp/http/file sources
     latency_ms: 200                # RTSP latency/buffer
     tcp_timeout: 5000000           # Connection timeout (µs)
@@ -87,8 +87,8 @@ detection:
   backend: onnxruntime                  # auto, tensorrt, hailo, ncnn, openvino, onnxruntime
   yolo_version: yolov8           # yolov5, yolov7, yolov8, yolov9, yolov10, yolo11
   
-  model_path: models/yolov8_avci.onnx
-  labels_path: models/avci.names
+  model_path: "models/yolov8_avci.onnx"
+  labels_path: "models/avci.names"
   
   input_width: 640
   input_height: 640
@@ -236,8 +236,8 @@ display:
 
 # Recording
 recording:
-  enabled: false                 # Set to true to enable recording
-  output_dir: /var/lagari/recordings
+  enabled: true                 # Set to true to enable recording
+  output_dir: /home/ieayvaz/lagari_recordings
   
   # Encoding settings
   codec: h264                    # h264, h265
@@ -246,7 +246,7 @@ recording:
   hw_encode: true                # Use hardware encoding if available
   
   # Container format
-  container: mp4                 # mp4, mkv, ts
+  container: mkv                 # mp4, mkv, ts (mkv recommended for live recording)
   
   # Overlay
   overlay:
@@ -255,6 +255,7 @@ recording:
     bounding_boxes: true
     state: true
     latency: true
+    fps: true
   
   # File management
   segment_duration_s: 0          # 0 = single file, >0 = split into segments

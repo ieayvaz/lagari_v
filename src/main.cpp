@@ -14,6 +14,7 @@
 #include "lagari/core/types.hpp"
 #include "lagari/core/ring_buffer.hpp"
 #include "lagari/core/spsc_queue.hpp"
+#include "lagari/core/profiler.hpp"
 
 #include "lagari/capture/capture.hpp"
 #include "lagari/detection/detector.hpp"
@@ -139,6 +140,7 @@ void processing_thread(
         const DetectionResult* detections_ptr = nullptr;
         
         if (detector && detector->is_running()) {
+            PERF_SCOPE("detection.total");
             auto detect_start = Clock::now();
             
             // Run synchronous detection
@@ -177,6 +179,7 @@ void processing_thread(
         // Display
         // ====================================================================
         if (display && display->is_enabled()) {
+            PERF_SCOPE("display.push");
             display->push_frame(*frame, detections_ptr, current_state, total_latency);
         }
         
@@ -184,7 +187,8 @@ void processing_thread(
         // Recording
         // ====================================================================
         if (recorder && recorder->is_recording()) {
-            recorder->add_frame(*frame, detections_ptr);
+            PERF_SCOPE("recording.add_frame");
+            recorder->add_frame(*frame, detections_ptr, current_state, total_latency);
         }
         
         frames_processed++;
@@ -234,6 +238,10 @@ void processing_thread(
             frames_processed = 0;
             detections_count = 0;
             last_stats_time = now;
+            
+            // Log profiler summary periodically
+            PERF_LOG_SUMMARY();
+            PERF_RESET();
         }
         
         // Rate limiting (if processing is faster than capture)

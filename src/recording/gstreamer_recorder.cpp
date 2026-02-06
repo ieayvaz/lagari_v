@@ -44,6 +44,10 @@ struct GstreamerRecorder::GstState {
     
     // Frame counter for timestamps
     uint64_t frame_count = 0;
+    
+    // Wall-clock start time for accurate timestamp calculation
+    TimePoint start_timestamp;
+    bool first_frame = true;
 };
 
 // ============================================================================
@@ -197,7 +201,8 @@ bool GstreamerRecorder::is_recording() const {
     return recording_.load(std::memory_order_acquire);
 }
 
-void GstreamerRecorder::add_frame(const Frame& frame, const DetectionResult* detections) {
+void GstreamerRecorder::add_frame(const Frame& frame, const DetectionResult* detections,
+                                   SystemState state, Duration latency) {
     if (!recording_.load(std::memory_order_acquire)) {
         return;
     }
@@ -234,7 +239,8 @@ void GstreamerRecorder::add_frame(const Frame& frame, const DetectionResult* det
             return;
         }
         output_mat = input_mat.clone();
-        overlay_renderer_.render_inplace(output_mat, detections, current_state_, current_latency_);
+        // Use the passed state and latency directly
+        overlay_renderer_.render_inplace(output_mat, detections, state, latency);
     } else {
         output_mat = frame_to_mat(frame);
         if (output_mat.empty()) {
@@ -245,10 +251,11 @@ void GstreamerRecorder::add_frame(const Frame& frame, const DetectionResult* det
         }
     }
 
-    // Push to GStreamer
+    // Push to GStreamer with frame's actual timestamp for accurate timing
     if (push_buffer(output_mat.data, output_mat.total() * output_mat.elemSize(),
                    static_cast<uint32_t>(output_mat.cols),
-                   static_cast<uint32_t>(output_mat.rows))) {
+                   static_cast<uint32_t>(output_mat.rows),
+                   frame.metadata.timestamp)) {
         std::lock_guard<std::mutex> lock(info_mutex_);
         frames_recorded_++;
         // Note: bytes_written is updated via pad probes or estimated
@@ -285,9 +292,12 @@ uint64_t GstreamerRecorder::bytes_written() const {
 std::string GstreamerRecorder::build_pipeline(const std::string& filename) const {
     std::ostringstream oss;
     
+    // appsrc -> queue -> videoconvert -> encoder -> queue -> parser -> mux -> filesink
     oss << build_source_element() << " ! ";
-    oss << "videoconvert ! ";
+    oss << "queue max-size-buffers=3 leaky=downstream ! ";  // Buffer after source
+    oss << "videoconvert ! video/x-raw,format=I420 ! ";     // Convert to I420 for encoder
     oss << build_encode_element() << " ! ";
+    oss << "queue max-size-buffers=30 ! ";                  // Buffer before muxer
     oss << build_mux_element() << " ! ";
     oss << build_sink_element(filename);
     
@@ -300,7 +310,7 @@ std::string GstreamerRecorder::build_source_element() const {
     oss << "appsrc name=src "
         << "is-live=true "
         << "format=time "
-        << "block=true ";  // Block if pipeline is slow
+        << "block=false ";  // Non-blocking to prevent deadlocks during shutdown
     
     return oss.str();
 }
@@ -313,8 +323,15 @@ std::string GstreamerRecorder::build_encode_element() const {
 #ifdef __aarch64__
             oss << "nvv4l2h265enc bitrate=" << (config_.bitrate_kbps * 1000);
 #else
-            oss << "x265enc bitrate=" << config_.bitrate_kbps
-                << " speed-preset=ultrafast tune=zerolatency";
+            // Try NVIDIA encoder first, then fall back to software
+            GstElementFactory* nvenc = gst_element_factory_find("nvh265enc");
+            if (nvenc) {
+                gst_object_unref(nvenc);
+                oss << "nvh265enc bitrate=" << config_.bitrate_kbps;
+            } else {
+                oss << "x265enc bitrate=" << config_.bitrate_kbps
+                    << " speed-preset=ultrafast tune=zerolatency";
+            }
 #endif
         } else {
             oss << "x265enc bitrate=" << config_.bitrate_kbps
@@ -327,13 +344,53 @@ std::string GstreamerRecorder::build_encode_element() const {
 #ifdef __aarch64__
             oss << "nvv4l2h264enc bitrate=" << (config_.bitrate_kbps * 1000);
 #else
-            // Try VAAPI, but most systems will need x264enc
-            oss << "x264enc bitrate=" << config_.bitrate_kbps
-                << " speed-preset=ultrafast tune=zerolatency";
+            // Try encoders in order of preference: NVIDIA > OpenH264 > x264
+            GstElementFactory* nvenc = gst_element_factory_find("nvh264enc");
+            GstElementFactory* openh264 = gst_element_factory_find("openh264enc");
+            GstElementFactory* x264 = gst_element_factory_find("x264enc");
+            
+            if (nvenc) {
+                gst_object_unref(nvenc);
+                if (openh264) gst_object_unref(openh264);
+                if (x264) gst_object_unref(x264);
+                // nvh264enc bitrate is in kbits/sec (same as config)
+                oss << "nvh264enc bitrate=" << config_.bitrate_kbps
+                    << " preset=low-latency-hq rc-mode=cbr";
+                LOG_INFO("GstreamerRecorder: Using nvh264enc hardware encoder");
+            } else if (openh264) {
+                if (x264) gst_object_unref(x264);
+                gst_object_unref(openh264);
+                oss << "openh264enc bitrate=" << (config_.bitrate_kbps * 1000);
+                LOG_INFO("GstreamerRecorder: Using openh264enc encoder");
+            } else if (x264) {
+                gst_object_unref(x264);
+                oss << "x264enc bitrate=" << config_.bitrate_kbps
+                    << " speed-preset=ultrafast tune=zerolatency";
+                LOG_INFO("GstreamerRecorder: Using x264enc software encoder");
+            } else {
+                LOG_WARN("GstreamerRecorder: No H.264 encoder found, trying x264enc anyway");
+                oss << "x264enc bitrate=" << config_.bitrate_kbps
+                    << " speed-preset=ultrafast tune=zerolatency";
+            }
 #endif
         } else {
-            oss << "x264enc bitrate=" << config_.bitrate_kbps
-                << " speed-preset=ultrafast tune=zerolatency";
+            // Software encoding explicitly requested
+            GstElementFactory* x264 = gst_element_factory_find("x264enc");
+            GstElementFactory* openh264 = gst_element_factory_find("openh264enc");
+            
+            if (x264) {
+                gst_object_unref(x264);
+                if (openh264) gst_object_unref(openh264);
+                oss << "x264enc bitrate=" << config_.bitrate_kbps
+                    << " speed-preset=ultrafast tune=zerolatency";
+            } else if (openh264) {
+                gst_object_unref(openh264);
+                oss << "openh264enc bitrate=" << (config_.bitrate_kbps * 1000);
+            } else {
+                LOG_WARN("GstreamerRecorder: No software H.264 encoder found");
+                oss << "x264enc bitrate=" << config_.bitrate_kbps
+                    << " speed-preset=ultrafast tune=zerolatency";
+            }
         }
         oss << " ! h264parse";
     }
@@ -343,12 +400,12 @@ std::string GstreamerRecorder::build_encode_element() const {
 
 std::string GstreamerRecorder::build_mux_element() const {
     if (config_.container == "mkv") {
-        return "matroskamux";
+        return "matroskamux streamable=true";
     } else if (config_.container == "ts") {
         return "mpegtsmux";
     } else {
-        // Default to MP4
-        return "mp4mux faststart=true";
+        // Default to MP4 - use settings for live streams
+        return "mp4mux faststart=true fragment-duration=1000";
     }
 }
 
@@ -426,24 +483,38 @@ void GstreamerRecorder::destroy_pipeline() {
         gst_->bus = nullptr;
     }
 
-    if (gst_->appsrc) {
-        // Send EOS and wait for it to propagate
-        gst_app_src_end_of_stream(GST_APP_SRC(gst_->appsrc));
-        
-        // Wait for EOS to reach the sink (important for proper file closing)
-        if (gst_->pipeline) {
+    if (gst_->appsrc && gst_->pipeline) {
+        // Only send EOS and wait if we actually pushed frames
+        if (gst_->frame_count > 0) {
+            LOG_DEBUG("GstreamerRecorder: Sending EOS after {} frames", gst_->frame_count);
+            gst_app_src_end_of_stream(GST_APP_SRC(gst_->appsrc));
+            
+            // Wait for EOS with shorter timeout (2 seconds)
             GstBus* bus = gst_element_get_bus(gst_->pipeline);
             if (bus) {
                 GstMessage* msg = gst_bus_timed_pop_filtered(
-                    bus, 5 * GST_SECOND,
+                    bus, 2 * GST_SECOND,
                     static_cast<GstMessageType>(GST_MESSAGE_EOS | GST_MESSAGE_ERROR));
                 if (msg) {
+                    if (GST_MESSAGE_TYPE(msg) == GST_MESSAGE_ERROR) {
+                        GError* err = nullptr;
+                        gst_message_parse_error(msg, &err, nullptr);
+                        LOG_WARN("GstreamerRecorder: Pipeline error during shutdown: {}",
+                                 err ? err->message : "unknown");
+                        if (err) g_error_free(err);
+                    }
                     gst_message_unref(msg);
+                } else {
+                    LOG_WARN("GstreamerRecorder: EOS timeout during shutdown");
                 }
                 gst_object_unref(bus);
             }
+        } else {
+            LOG_DEBUG("GstreamerRecorder: No frames recorded, skipping EOS");
         }
-        
+    }
+
+    if (gst_->appsrc) {
         gst_object_unref(gst_->appsrc);
         gst_->appsrc = nullptr;
     }
@@ -456,10 +527,12 @@ void GstreamerRecorder::destroy_pipeline() {
 
     gst_->caps_set = false;
     gst_->frame_count = 0;
+    gst_->first_frame = true;
 }
 
 bool GstreamerRecorder::push_buffer(const uint8_t* data, size_t size,
-                                    uint32_t width, uint32_t height) {
+                                    uint32_t width, uint32_t height,
+                                    TimePoint frame_timestamp) {
     if (!gst_->appsrc) {
         return false;
     }
@@ -481,9 +554,22 @@ bool GstreamerRecorder::push_buffer(const uint8_t* data, size_t size,
         return false;
     }
 
-    // Set buffer timestamps
+    // Calculate timestamp based on wall-clock time for accurate playback
+    // On first frame, record the start timestamp
+    if (gst_->first_frame) {
+        gst_->start_timestamp = frame_timestamp;
+        gst_->first_frame = false;
+    }
+    
+    // Calculate PTS as duration since first frame (in nanoseconds)
+    auto elapsed = frame_timestamp - gst_->start_timestamp;
+    auto elapsed_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed).count();
+    GstClockTime pts = static_cast<GstClockTime>(elapsed_ns);
+    
+    // Estimate duration based on configured FPS
     GstClockTime duration = GST_SECOND / config_.fps;
-    GST_BUFFER_PTS(buffer) = gst_->frame_count * duration;
+    
+    GST_BUFFER_PTS(buffer) = pts;
     GST_BUFFER_DURATION(buffer) = duration;
     gst_->frame_count++;
 
@@ -591,7 +677,7 @@ bool GstreamerRecorder::is_running() const { return false; }
 bool GstreamerRecorder::start_recording(const std::string&) { return false; }
 void GstreamerRecorder::stop_recording() {}
 bool GstreamerRecorder::is_recording() const { return false; }
-void GstreamerRecorder::add_frame(const Frame&, const DetectionResult*) {}
+void GstreamerRecorder::add_frame(const Frame&, const DetectionResult*, SystemState, Duration) {}
 void GstreamerRecorder::set_overlay_enabled(bool) {}
 std::string GstreamerRecorder::current_filename() const { return ""; }
 double GstreamerRecorder::recording_duration() const { return 0.0; }
@@ -604,7 +690,7 @@ std::string GstreamerRecorder::build_mux_element() const { return ""; }
 std::string GstreamerRecorder::build_sink_element(const std::string&) const { return ""; }
 bool GstreamerRecorder::create_pipeline(const std::string&) { return false; }
 void GstreamerRecorder::destroy_pipeline() {}
-bool GstreamerRecorder::push_buffer(const uint8_t*, size_t, uint32_t, uint32_t) { return false; }
+bool GstreamerRecorder::push_buffer(const uint8_t*, size_t, uint32_t, uint32_t, TimePoint) { return false; }
 std::string GstreamerRecorder::generate_filename() const { return ""; }
 void GstreamerRecorder::check_storage() {}
 void GstreamerRecorder::delete_oldest_recording() {}

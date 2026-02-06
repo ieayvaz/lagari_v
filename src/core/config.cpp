@@ -25,18 +25,25 @@ struct Config::Impl {
         while (std::getline(ss, part, '.')) {
             parts.push_back(part);
         }
-        YAML::Node current = root;
-        for (const auto& p : parts) {
-            if(!current || !current.IsMap()) {
+        
+        // Clone the root to avoid modifying the original tree
+        // yaml-cpp's [] operator can modify the tree even on const nodes
+        YAML::Node current = YAML::Clone(root);
+        
+        for (size_t i = 0; i < parts.size(); ++i) {
+            const auto& p = parts[i];
+            if(!current) {
                 return YAML::Node();
             }
-            const YAML::Node& const_curr = current;
-            YAML::Node next = const_curr[p];
-
-            if (!next.IsDefined()) {
+            if(!current.IsMap()) {
+                return YAML::Node();
+            }
+            
+            // Check if key exists before accessing
+            if (!current[p]) {
                 return YAML::Node(YAML::NodeType::Undefined);
             }
-            current = next;
+            current = current[p];
         }
 
         return current;

@@ -4,6 +4,8 @@
  */
 
 #include "lagari/recording/recorder.hpp"
+#include "lagari/recording/ffmpeg_recorder.hpp"
+#include "lagari/recording/opencv_recorder.hpp"
 #include "lagari/recording/gstreamer_recorder.hpp"
 #include "lagari/core/config.hpp"
 #include "lagari/core/logger.hpp"
@@ -18,7 +20,7 @@ std::unique_ptr<IRecorder> create_recorder(const Config& config) {
         return nullptr;
     }
 
-#ifdef HAS_GSTREAMER
+    // Build RecordingConfig from YAML config
     RecordingConfig rec_config;
     rec_config.enabled = true;
     rec_config.output_dir = config.get_string("recording.output_dir", "/var/lagari/recordings");
@@ -38,12 +40,29 @@ std::unique_ptr<IRecorder> create_recorder(const Config& config) {
     rec_config.overlay.bounding_boxes = config.get_bool("recording.overlay.bounding_boxes", true);
     rec_config.overlay.state = config.get_bool("recording.overlay.state", true);
     rec_config.overlay.latency = config.get_bool("recording.overlay.latency", true);
+    rec_config.overlay.fps = config.get_bool("recording.overlay.fps", true);
 
-    return std::make_unique<GstreamerRecorder>(rec_config);
+    // Check which backend to use (default: ffmpeg for accurate timestamps)
+    std::string backend = config.get_string("recording.backend", "ffmpeg");
+    
+    if (backend == "ffmpeg") {
+        LOG_DEBUG("Using FFmpeg recording backend (accurate VFR timestamps)");
+        return std::make_unique<FFmpegRecorder>(rec_config);
+    } else if (backend == "opencv") {
+        LOG_DEBUG("Using OpenCV recording backend");
+        return std::make_unique<OpenCVRecorder>(rec_config);
+    } else if (backend == "gstreamer") {
+#ifdef HAS_GSTREAMER
+        LOG_DEBUG("Using GStreamer recording backend");
+        return std::make_unique<GstreamerRecorder>(rec_config);
 #else
-    LOG_WARN("Recording requires GStreamer, which is not available");
-    return nullptr;
+        LOG_WARN("GStreamer backend requested but not available, falling back to FFmpeg");
+        return std::make_unique<FFmpegRecorder>(rec_config);
 #endif
+    } else {
+        LOG_WARN("Unknown recording backend '{}', using FFmpeg", backend);
+        return std::make_unique<FFmpegRecorder>(rec_config);
+    }
 }
 
 std::unique_ptr<IRecorder> create_recorder(const RecordingConfig& config) {
@@ -51,12 +70,8 @@ std::unique_ptr<IRecorder> create_recorder(const RecordingConfig& config) {
         return nullptr;
     }
 
-#ifdef HAS_GSTREAMER
-    return std::make_unique<GstreamerRecorder>(config);
-#else
-    LOG_WARN("Recording requires GStreamer, which is not available");
-    return nullptr;
-#endif
+    // Default to FFmpeg backend for accurate timestamps
+    return std::make_unique<FFmpegRecorder>(config);
 }
 
 }  // namespace lagari

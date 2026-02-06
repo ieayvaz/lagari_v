@@ -1,5 +1,6 @@
 #include "lagari/detection/yolo_processor.hpp"
 #include "lagari/core/logger.hpp"
+#include "lagari/core/profiler.hpp"
 
 #include <opencv2/dnn.hpp>
 #include <algorithm>
@@ -383,23 +384,34 @@ DetectionResult YOLODetectorBase::detect(const Frame& frame) {
     auto start = Clock::now();
 
     // Preprocess
-    if (input_buffer_.empty()) {
-        input_buffer_.resize(config_.input_width * config_.input_height * 3);
+    YOLOProcessor::PreprocessInfo preproc_info;
+    {
+        PERF_SCOPE("detection.preprocess");
+        if (input_buffer_.empty()) {
+            input_buffer_.resize(config_.input_width * config_.input_height * 3);
+        }
+        preproc_info = processor_.preprocess(frame, input_buffer_.data());
     }
-    auto preproc_info = processor_.preprocess(frame, input_buffer_.data());
 
     // Infer
-    if (!infer(input_buffer_.data(), output_buffer_.data())) {
-        LOG_ERROR("YOLODetectorBase: Inference failed");
-        return {};
+    {
+        PERF_SCOPE("detection.inference");
+        if (!infer(input_buffer_.data(), output_buffer_.data())) {
+            LOG_ERROR("YOLODetectorBase: Inference failed");
+            return {};
+        }
     }
 
     // Postprocess
-    auto result = processor_.postprocess(
-        output_buffer_.data(), 
-        get_output_shape(), 
-        preproc_info,
-        frame.metadata.frame_id);
+    DetectionResult result;
+    {
+        PERF_SCOPE("detection.postprocess");
+        result = processor_.postprocess(
+            output_buffer_.data(), 
+            get_output_shape(), 
+            preproc_info,
+            frame.metadata.frame_id);
+    }
 
     // Update stats
     auto end = Clock::now();

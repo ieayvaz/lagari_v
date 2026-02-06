@@ -59,6 +59,7 @@ add_library(lagari_core STATIC
     src/core/config.cpp
     src/core/logger.cpp
     src/core/system_state.cpp
+    src/core/profiler.cpp
 )
 target_include_directories(lagari_core PUBLIC 
     ${CMAKE_SOURCE_DIR}/include
@@ -69,6 +70,14 @@ target_link_libraries(lagari_core PUBLIC
     spdlog::spdlog
     Threads::Threads
 )
+
+# Enable profiling in Debug builds (zero overhead in Release)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    target_compile_definitions(lagari_core PUBLIC ENABLE_PROFILING)
+    message(STATUS "Profiling: ENABLED (Debug/RelWithDebInfo build)")
+else()
+    message(STATUS "Profiling: DISABLED (Release build - zero overhead)")
+endif()
 
 # ============================================================================
 # Capture Module
@@ -230,6 +239,8 @@ target_include_directories(lagari_comms PRIVATE
 add_library(lagari_recording STATIC
     src/recording/recorder.cpp
     src/recording/overlay_renderer.cpp
+    src/recording/ffmpeg_recorder.cpp
+    src/recording/opencv_recorder.cpp
     src/recording/gstreamer_recorder.cpp
 )
 target_link_libraries(lagari_recording PUBLIC
@@ -319,6 +330,8 @@ message(STATUS "  ONNX Runtime: ${HAS_ONNXRUNTIME}")
 message(STATUS "")
 message(STATUS "Output modules:")
 message(STATUS "  Display (GStreamer): ${HAS_GSTREAMER}")
+message(STATUS "  Recording (FFmpeg): TRUE")
+message(STATUS "  Recording (OpenCV): TRUE")
 message(STATUS "  Recording (GStreamer): ${HAS_GSTREAMER}")
 message(STATUS "")
 message(STATUS "Build tests: ${BUILD_TESTS}")

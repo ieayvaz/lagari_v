@@ -65,9 +65,13 @@ public:
      * 
      * @param frame Frame to record
      * @param detections Optional detections for overlay
+     * @param state Current system state for overlay
+     * @param latency Current processing latency for overlay
      */
     virtual void add_frame(const Frame& frame, 
-                          const DetectionResult* detections = nullptr) = 0;
+                          const DetectionResult* detections,
+                          SystemState state,
+                          Duration latency) = 0;
 
     /**
      * @brief Set overlay enabled
