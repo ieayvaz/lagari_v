@@ -10,6 +10,8 @@
 #include "lagari/core/logger.hpp"
 #include <vector>
 #include <algorithm>
+#include <sstream>
+#include <iomanip>
 
 namespace lagari {
 

@@ -1,6 +1,7 @@
 #include "lagari/capture/v4l2_capture.hpp"
 #include "lagari/core/config.hpp"
 #include "lagari/core/logger.hpp"
+#include "lagari/core/profiler.hpp"
 
 #include <linux/videodev2.h>
 #include <sys/ioctl.h>
@@ -547,6 +548,7 @@ bool V4L2Capture::read_frame() {
 }
 
 void V4L2Capture::process_frame(const void* data, size_t size) {
+    PERF_SCOPE("capture.process");
     auto now = Clock::now();
     
     // Convert to our Frame format
@@ -595,6 +597,7 @@ void V4L2Capture::process_frame(const void* data, size_t size) {
 }
 
 FramePtr V4L2Capture::convert_frame(const void* data, size_t size) {
+    PERF_SCOPE("capture.convert");
     // Create output frame in BGR24 format
     auto frame = std::make_shared<Frame>(actual_width_, actual_height_, PixelFormat::BGR24);
 
