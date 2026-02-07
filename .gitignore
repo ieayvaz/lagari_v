@@ -32,8 +32,16 @@ logs/
 # Recordings
 recordings/
 
+*.out
+*.log
+*.bin
+*.raw
+*.parm
+
 # Models (large files)
 models/*.engine
+models/*.trt
+models/*.pt
 models/*.onnx
 models/*.hef
 models/*.bin
